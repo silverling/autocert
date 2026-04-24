@@ -17,7 +17,10 @@ INSTALLED_ENV_PATH="${USER_CONFIG_DIR}/autocert.env"
 USER_SERVICE_PATH="${USER_SYSTEMD_DIR}/autocert.service"
 USER_TIMER_PATH="${USER_SYSTEMD_DIR}/autocert.timer"
 
-HTTPS_PROXY_URL="${AUTOCERT_HTTPS_PROXY:-http://192.168.9.3:7897}"
+HTTPS_PROXY_URL="${https_proxy:-${HTTPS_PROXY:-}}"
+HTTP_PROXY_URL="${http_proxy:-${HTTP_PROXY:-}}"
+ALL_PROXY_URL="${all_proxy:-${ALL_PROXY:-}}"
+NO_PROXY_VALUE="${no_proxy:-${NO_PROXY:-}}"
 START_DELAY_SECONDS="${AUTOCERT_START_DELAY_SECONDS:-30}"
 
 if [[ ! -f "${CONFIG_PATH}" ]]; then
@@ -38,7 +41,30 @@ GOCACHE=/tmp/go-build GOMODCACHE=/tmp/go-mod-cache \
 install -m 0755 "${BINARY_PATH}" "${INSTALLED_BINARY_PATH}"
 install -m 0600 "${SOURCE_ENV_PATH}" "${INSTALLED_ENV_PATH}"
 
-cat > "${USER_SERVICE_PATH}" <<EOF
+PROXY_ENV_LINES=""
+
+append_proxy_env() {
+  local key="$1"
+  local value="$2"
+
+  if [[ -z "${value}" ]]; then
+    return
+  fi
+
+  PROXY_ENV_LINES+="Environment=${key}=${value}"$'\n'
+}
+
+append_proxy_env "http_proxy" "${HTTP_PROXY_URL}"
+append_proxy_env "HTTP_PROXY" "${HTTP_PROXY_URL}"
+append_proxy_env "https_proxy" "${HTTPS_PROXY_URL}"
+append_proxy_env "HTTPS_PROXY" "${HTTPS_PROXY_URL}"
+append_proxy_env "all_proxy" "${ALL_PROXY_URL}"
+append_proxy_env "ALL_PROXY" "${ALL_PROXY_URL}"
+append_proxy_env "no_proxy" "${NO_PROXY_VALUE}"
+append_proxy_env "NO_PROXY" "${NO_PROXY_VALUE}"
+
+{
+  cat <<EOF
 [Unit]
 Description=Auto renew Let's Encrypt certificates from workspace
 Wants=network-online.target nss-lookup.target
@@ -50,13 +76,17 @@ UMask=0077
 WorkingDirectory=${REPO_ROOT}
 TimeoutStartSec=15min
 EnvironmentFile=${INSTALLED_ENV_PATH}
-Environment=http_proxy=${HTTPS_PROXY_URL}
-Environment=https_proxy=${HTTPS_PROXY_URL}
-Environment=HTTP_PROXY=${HTTPS_PROXY_URL}
-Environment=HTTPS_PROXY=${HTTPS_PROXY_URL}
+EOF
+
+  if [[ -n "${PROXY_ENV_LINES}" ]]; then
+    printf "%s" "${PROXY_ENV_LINES}"
+  fi
+
+  cat <<EOF
 ExecStartPre=/usr/bin/sleep ${START_DELAY_SECONDS}
 ExecStart=${INSTALLED_BINARY_PATH} run --config ${CONFIG_PATH}
 EOF
+} > "${USER_SERVICE_PATH}"
 
 install -m 0644 "${REPO_ROOT}/deploy/systemd/autocert.timer" "${USER_TIMER_PATH}"
 

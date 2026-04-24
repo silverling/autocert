@@ -69,4 +69,5 @@ ACME 账号数据会保存在 `acme.storage_dir/accounts/` 下。
 1. 这个用户级 service 仍然会读取当前工作区里的 `config.yaml`
 2. 如果你移动了仓库路径，需要重新运行一次安装脚本
 3. 如果希望用户 timer 在没有登录会话时也继续运行，还需要执行 `sudo loginctl enable-linger $USER`
-4. `install-user.sh` 默认会给 service 设置 `https_proxy/http_proxy=http://192.168.9.3:7897`，并在启动前等待 30 秒
+4. `install-user.sh` 会在安装时自动读取当前 shell 里的 `https_proxy`、`http_proxy`、`all_proxy`、`no_proxy` 及其大写变体；如果这些环境变量没有设置，就不会写入代理配置
+5. `install-user.sh` 默认会在 service 启动前等待 30 秒；如果需要调整，可以在执行脚本前设置 `AUTOCERT_START_DELAY_SECONDS`
