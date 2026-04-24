@@ -1,0 +1,35 @@
+acme:
+  email: ops@example.com
+  directory_url: https://acme-v02.api.letsencrypt.org/directory
+  storage_dir: ./data
+  key_type: ec256
+  renew_before: 720h
+  check_interval: 24h
+  use_ari: true
+
+dns:
+  provider: cloudflare
+  propagation_timeout: 2m
+  polling_interval: 5s
+  recursive_nameservers:
+    - 1.1.1.1
+    - 8.8.8.8
+  disable_authoritative_ns_check: false
+  cloudflare:
+    user_token_env: CLOUDFLARE_USER_TOKEN
+
+certificates:
+  - name: example-com
+    domains:
+      - example.com
+      - "*.example.com"
+    output_dir: ./data/live/example-com
+    reload_command: ["systemctl", "reload", "nginx"]
+
+  - name: api-example-net
+    domains:
+      - api.example.net
+      - m.api.example.net
+    output_dir: ./data/live/api-example-net
+    cloudflare:
+      user_token_env: CF_USER_API_EXAMPLE_NET_TOKEN
