@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -58,7 +59,7 @@ func parseCommand(args []string) (string, []string) {
 func runOnce(args []string) int {
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	configPath := fs.String("config", "./config.yaml", "Path to YAML configuration file")
+	configPath := fs.String("config", defaultConfigPath(), "Path to YAML configuration file")
 
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -87,7 +88,7 @@ func runOnce(args []string) int {
 func runDaemonCommand(args []string) int {
 	fs := flag.NewFlagSet("daemon", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	configPath := fs.String("config", "./config.yaml", "Path to YAML configuration file")
+	configPath := fs.String("config", defaultConfigPath(), "Path to YAML configuration file")
 
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -130,8 +131,20 @@ func newLogger() *slog.Logger {
 	}))
 }
 
+// Installed binaries default to the per-user config file instead of a repo-local path.
+func defaultConfigPath() string {
+	homeDir, err := os.UserHomeDir()
+	if err != nil || homeDir == "" {
+		return "./config.yaml"
+	}
+
+	return filepath.Join(homeDir, ".config", "autocert", "config.yaml")
+}
+
 func printUsage(out *os.File) {
+	defaultPath := defaultConfigPath()
 	fmt.Fprintln(out, "Usage:")
-	fmt.Fprintln(out, "  autocert run --config ./config.yaml")
-	fmt.Fprintln(out, "  autocert daemon --config ./config.yaml")
+	fmt.Fprintln(out, "  autocert run [--config PATH]")
+	fmt.Fprintln(out, "  autocert daemon [--config PATH]")
+	fmt.Fprintf(out, "\nDefault config path: %s\n", defaultPath)
 }

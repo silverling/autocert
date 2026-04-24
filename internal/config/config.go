@@ -26,7 +26,7 @@ type Config struct {
 	DNS          DNSConfig           `yaml:"dns"`
 	Certificates []CertificateConfig `yaml:"certificates"`
 
-	baseDir string `yaml:"-"`
+	dataDir string `yaml:"-"`
 }
 
 type ACMEConfig struct {
@@ -76,7 +76,7 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("read config file: %w", err)
 	}
 
-	cfg := &Config{baseDir: filepath.Dir(absPath)}
+	cfg := &Config{dataDir: defaultDataDir()}
 	decoder := yaml.NewDecoder(bytes.NewReader(content))
 	decoder.KnownFields(true)
 	if err := decoder.Decode(cfg); err != nil {
@@ -132,7 +132,7 @@ func (c *Config) applyDefaults() {
 
 	applyCloudflareDefaults(&c.DNS.Cloudflare)
 
-	c.ACME.StorageDir = resolvePath(c.baseDir, c.ACME.StorageDir)
+	c.ACME.StorageDir = resolveDataPath(c.dataDir, c.ACME.StorageDir)
 
 	for i := range c.Certificates {
 		cert := &c.Certificates[i]
@@ -152,7 +152,7 @@ func (c *Config) applyDefaults() {
 			cert.OutputDir = filepath.Join(c.ACME.StorageDir, "live", cert.Name)
 		}
 
-		cert.OutputDir = resolvePath(c.baseDir, cert.OutputDir)
+		cert.OutputDir = resolveDataPath(c.dataDir, cert.OutputDir)
 	}
 }
 
@@ -262,9 +262,23 @@ func normalizeStringSlice(values []string) []string {
 	return result
 }
 
-func resolvePath(baseDir, path string) string {
+// Relative certificate data paths live under the user's data root, not next to config.yaml.
+func defaultDataDir() string {
+	homeDir, err := os.UserHomeDir()
+	if err != nil || homeDir == "" {
+		return ""
+	}
+
+	return filepath.Join(homeDir, ".local", "share", "autocert")
+}
+
+func resolveDataPath(baseDir, path string) string {
 	if path == "" || filepath.IsAbs(path) {
 		return path
+	}
+
+	if baseDir == "" {
+		return filepath.Clean(path)
 	}
 
 	return filepath.Clean(filepath.Join(baseDir, path))

@@ -5,14 +5,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 BINARY_PATH="${REPO_ROOT}/bin/autocert"
-CONFIG_PATH="${REPO_ROOT}/config.yaml"
+SOURCE_CONFIG_PATH="${REPO_ROOT}/config.yaml"
 SOURCE_ENV_PATH="${REPO_ROOT}/.env"
 
 USER_BIN_DIR="${HOME}/.local/bin"
 USER_CONFIG_DIR="${HOME}/.config/autocert"
 USER_SYSTEMD_DIR="${HOME}/.config/systemd/user"
+USER_DATA_DIR="${HOME}/.local/share/autocert"
 
 INSTALLED_BINARY_PATH="${USER_BIN_DIR}/autocert"
+INSTALLED_CONFIG_PATH="${USER_CONFIG_DIR}/config.yaml"
 INSTALLED_ENV_PATH="${USER_CONFIG_DIR}/autocert.env"
 USER_SERVICE_PATH="${USER_SYSTEMD_DIR}/autocert.service"
 USER_TIMER_PATH="${USER_SYSTEMD_DIR}/autocert.timer"
@@ -23,8 +25,8 @@ ALL_PROXY_URL="${all_proxy:-${ALL_PROXY:-}}"
 NO_PROXY_VALUE="${no_proxy:-${NO_PROXY:-}}"
 START_DELAY_SECONDS="${AUTOCERT_START_DELAY_SECONDS:-30}"
 
-if [[ ! -f "${CONFIG_PATH}" ]]; then
-  echo "missing config: ${CONFIG_PATH}" >&2
+if [[ ! -f "${SOURCE_CONFIG_PATH}" ]]; then
+  echo "missing config: ${SOURCE_CONFIG_PATH}" >&2
   exit 1
 fi
 
@@ -33,13 +35,16 @@ if [[ ! -f "${SOURCE_ENV_PATH}" ]]; then
   exit 1
 fi
 
-mkdir -p "${REPO_ROOT}/bin" "${USER_BIN_DIR}" "${USER_CONFIG_DIR}" "${USER_SYSTEMD_DIR}"
+mkdir -p "${REPO_ROOT}/bin"
+install -d -m 0755 "${USER_BIN_DIR}"
+install -d -m 0700 "${USER_CONFIG_DIR}" "${USER_SYSTEMD_DIR}" "${USER_DATA_DIR}"
 
-GOCACHE=/tmp/go-build GOMODCACHE=/tmp/go-mod-cache \
-  go build -o "${BINARY_PATH}" "${REPO_ROOT}/cmd/autocert"
+go build -o "${BINARY_PATH}" "${REPO_ROOT}/cmd/autocert"
 
 install -m 0755 "${BINARY_PATH}" "${INSTALLED_BINARY_PATH}"
+install -m 0600 "${SOURCE_CONFIG_PATH}" "${INSTALLED_CONFIG_PATH}"
 install -m 0600 "${SOURCE_ENV_PATH}" "${INSTALLED_ENV_PATH}"
+chmod 0700 "${USER_CONFIG_DIR}" "${USER_SYSTEMD_DIR}" "${USER_DATA_DIR}"
 
 PROXY_ENV_LINES=""
 
@@ -66,14 +71,14 @@ append_proxy_env "NO_PROXY" "${NO_PROXY_VALUE}"
 {
   cat <<EOF
 [Unit]
-Description=Auto renew Let's Encrypt certificates from workspace
+Description=Auto renew Let's Encrypt certificates from user config
 Wants=network-online.target nss-lookup.target
 After=network-online.target nss-lookup.target
 
 [Service]
 Type=oneshot
 UMask=0077
-WorkingDirectory=${REPO_ROOT}
+WorkingDirectory=${USER_CONFIG_DIR}
 TimeoutStartSec=15min
 EnvironmentFile=${INSTALLED_ENV_PATH}
 EOF
@@ -84,7 +89,7 @@ EOF
 
   cat <<EOF
 ExecStartPre=/usr/bin/sleep ${START_DELAY_SECONDS}
-ExecStart=${INSTALLED_BINARY_PATH} run --config ${CONFIG_PATH}
+ExecStart=${INSTALLED_BINARY_PATH} run
 EOF
 } > "${USER_SERVICE_PATH}"
 
